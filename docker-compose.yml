@@ -1,0 +1,117 @@
+version: "3.8"
+
+services:
+  rabbitmq:
+    image: rabbitmq:3.12-management
+    container_name: rabbitmq_broker
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - ./config/base/definitions.json:/etc/rabbitmq/definitions.json:ro
+      - ./config/conf/rabbitmq/rabbitmq.conf:/etc/rabbitmq/rabbitmq.conf:ro
+      - ./logs/rabbitmq.log:/var/log/rabbitmq/rabbitmq.log
+    networks:
+      - frontnet
+      - backnet
+    ports:
+      - "15673:15672"
+    healthcheck:
+      test: [ "CMD-SHELL", "rabbitmq-diagnostics -q check_running && rabbitmq-diagnostics -q check_port_connectivity" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+  primary:
+    image: postgres:latest
+    container_name: primary_db
+    env_file:
+      - config/secrets/environments/.env.primary
+    volumes:
+      - pg_data_primary:/var/lib/postgresql/data
+      - ./config/conf/primary/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./config/conf/primary/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./scripts/init-primary.sh:/docker-entrypoint-initdb.d/init-primary.sh:ro
+#      - ./config/base/chadland.sql:/docker-entrypoint-initdb.d/chadland.sql:ro
+      - ./logs/primary.log:/var/log/postgresql/primary.log  # Use log-configurations.sh to ensure primary.log is created and properly configured.
+      - ./config/secrets/ssl:/etc/ssl/postgresql:ro  # Use ssl-configurations.sh to ensure related ssl files are created and properly configured.
+    networks:
+      - backnet
+    command: ["-c", "config_file=/etc/postgresql/postgresql.conf", "-c", "hba_file=/etc/postgresql/pg_hba.conf"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+  standby:
+    image: postgres:latest
+    container_name: standby_db
+    env_file:
+      - config/secrets/environments/.env.standby
+    volumes:
+      - ./config/conf/standby/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./config/conf/standby/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./scripts/command-standby.sh:/command-standby.sh:ro
+      - ./logs/standby.log:/var/log/postgresql/standby.log # Use log-configurations.sh to ensure standby.log is created and properly configured.
+      - ./config/secrets/ssl:/etc/ssl/postgresql:ro # Use ssl-configurations.sh to ensure related ssl files are created and properly configured.
+    networks:
+      - frontnet
+      - backnet
+    ports:
+      - "5433:5432"
+    entrypoint: ["sh"]
+    command: ["/command-standby.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    depends_on:
+      - primary
+  user:
+    image: python:latest
+    container_name: user_service
+    env_file:
+      - config/secrets/environments/.env.dev
+    volumes:
+      - ./config/base/logger_config.yml:/app/config/base/logger_config.yml:ro
+      - ./logs/app.log:/app/logs/app.log
+      - ./logs/access.log:/app/logs/access.log
+      - ./logs/error.log:/app/logs/error.log
+      - ./scripts/command-user.sh:/app/scripts/command-user.sh:ro
+      - ./src:/app/src
+      - ./pyproject.toml:/app/pyproject.toml:ro
+    networks:
+      - frontnet
+      - backnet
+    ports:
+      - "8000:8000"
+    working_dir: /app
+    entrypoint: ["sh"]
+    command: ["/app/scripts/command-user.sh"]
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:8000/ping || exit 1" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    depends_on:
+      - primary
+      - standby
+      - rabbitmq
+
+volumes:
+  rabbitmq_data:
+  pg_data_primary:
+
+networks:
+  backnet:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.25.0.0/16
+  frontnet:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.26.0.0/16
