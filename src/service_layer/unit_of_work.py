@@ -7,92 +7,67 @@ class AbstractUnitOfWork(abc.ABC):
     """
     Abstract base class for a Unit of Work.
 
-    Manages a business transaction, ensuring atomicity and providing a way
-    to collect domain events.
+    Manages a business transaction for the transaction service,
+    ensuring atomicity and providing a way to collect domain events.
     """
 
-    users: repository.AbstractRepository
+    repo: repository.AbstractRepository
 
-    def __enter__(self):
-        """
-        Enters the context for the Unit of Work.
-        """
-        return self
-
-    def __exit__(self, *args):
-        """
-        Exits the context for the Unit of Work, ensuring rollback on exit.
-        """
-        self.rollback()
-
-    def commit(self):
+    async def commit(self):
         """
         Commits changes made within the unit of work.
         """
-        self._commit()
+        await self._commit()
 
     def collect_new_events(self):
         """
         Collects new domain events from tracked aggregates.
         """
-        for user in self.users.seen:
-            while user.events:
-                yield user.events.pop(0)
+        for entity in self.repo.seen:
+            while entity.events:
+                yield entity.events.pop(0)
 
     @abc.abstractmethod
-    def _commit(self):
+    async def _commit(self):
         """
         Abstract method to commit database changes.
         """
         raise NotImplementedError
 
     @abc.abstractmethod
-    def rollback(self):
+    async def rollback(self):
         """
-        Abstract method to roll back database changes.
+        Abstract method to rollback database changes.
         """
         raise NotImplementedError
 
 
 class SqlAlchemyUnitOfWork(AbstractUnitOfWork):
     """
-    SQLAlchemy implementation of the Unit of Work.
+    SQLAlchemy implementation of the Unit of Work pattern.
 
-    Manages SQLAlchemy sessions and provides a concrete user repository.
+    Provides access to all repositories through a single transaction context.
+    All new repositories for TokenApproval, ApprovalTransaction, and SwapTransaction
+    are accessible through the main repo instance.
     """
 
     def __init__(self, session_factory):
-        """
-        Initializes the SQLAlchemy Unit of Work.
-
-        Args:
-            session_factory (Callable[[], Session]): A callable that creates a new SQLAlchemy Session.
-        """
         self.session_factory = session_factory
 
-    def __enter__(self):
-        """
-        Enters the SQLAlchemy Unit of Work context, creating a session and repository.
-        """
-        self.session = self.session_factory()  # type: Session
-        self.users = repository.SqlAlchemyRepository(self.session)
-        return super().__enter__()
+    async def __aenter__(self):
+        self.session = self.session_factory()
+        self.repo = repository.SqlAlchemyRepository(self.session)
+        return self
 
-    def __exit__(self, *args):
-        """
-        Exits the SQLAlchemy Unit of Work context, rolling back and closing the session.
-        """
-        super().__exit__(*args)
-        self.session.close()
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        if exc_type:
+            await self.session.rollback()
+        else:
+            await self.session.commit()
+        await self.session.close()
 
-    def _commit(self):
-        """
-        Commits the current SQLAlchemy session.
-        """
-        self.session.commit()
+    async def _commit(self):
+        await self.session.commit()
 
-    def rollback(self):
-        """
-        Rolls back the current SQLAlchemy session.
-        """
-        self.session.rollback()
+    async def rollback(self):
+        await self.session.rollback()

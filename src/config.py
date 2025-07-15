@@ -4,10 +4,10 @@ import yaml
 from pathlib import Path
 from urllib.parse import quote
 
-def get_standby_url():
-    if os.getenv('STANDBY_URL'):
-        return os.getenv('STANDBY_URL')
+from cryptography.fernet import Fernet
 
+
+def get_standby_url():
     host = os.getenv('STANDBY_HOST')
     port = os.getenv('STANDBY_PORT', '5432')
     database = os.getenv('STANDBY_NAME')
@@ -18,13 +18,10 @@ def get_standby_url():
         raise ValueError("STANDBY_HOST, STANDBY_NAME ve STANDBY_USERNAME gerekli")
 
     password_part = f":{quote(password)}" if password else ""
-    return f"postgresql://{quote(username)}{password_part}@{host}:{port}/{database}"
+    return f"postgresql+asyncpg://{quote(username)}{password_part}@{host}:{port}/{database}"
 
 
-def get_primary_url():
-    if os.getenv('PRIMARY_URL'):
-        return os.getenv('PRIMARY_URL')
-
+def get_primary_url(is_async: bool):
     host = os.getenv('PRIMARY_HOST')
     port = os.getenv('PRIMARY_PORT', '5432')
     database = os.getenv('PRIMARY_NAME')
@@ -35,7 +32,7 @@ def get_primary_url():
         raise ValueError("PRIMARY_HOST, PRIMARY_NAME ve PRIMARY_USERNAME gerekli!")
 
     password_part = f":{quote(password)}" if password else ""
-    return f"postgresql://{quote(username)}{password_part}@{host}:{port}/{database}"
+    return f"postgresql{'+asyncpg' if is_async else '+psycopg2'}://{quote(username)}{password_part}@{host}:{port}/{database}"
 
 
 def get_rabbitmq_url():
@@ -54,6 +51,25 @@ def get_rabbitmq_url():
     password_part = f":{quote(password)}" if password else ""
     vhost_part = f"/{quote(vhost)}" if vhost != '/' else vhost
     return f"amqp://{quote(username)}{password_part}@{host}:{port}{vhost_part}"
+
+def get_encyption_key():
+    key = os.getenv("ENCRYPTION_KEY")
+    return Fernet(key)
+
+
+def get_avalanche_rpc_url():
+    """
+    Get Avalanche C-Chain RPC URL from environment variables.
+
+    Returns:
+        str: Avalanche RPC URL
+    """
+    # Allow override via environment variable
+    if os.getenv('AVALANCHE_RPC_URL'):
+        return os.getenv('AVALANCHE_RPC_URL')
+
+    # Default to public Avalanche C-Chain RPC
+    return "https://api.avax.network/ext/bc/C/rpc"
 
 
 def get_sqlite_url():

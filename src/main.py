@@ -16,13 +16,13 @@ async def lifespan(_app: FastAPI):
     """
     Manages the startup and shutdown of the FastAPI application.
 
-    Initializes the ORM, database engine, message bus, and starts the
-    message consumer. Ensures proper cleanup on application shutdown.
+    Initializes the ORM, database engine, message bus, blockchain adapter,
+    and starts the message consumer. Ensures proper cleanup on application shutdown.
     """
     from src import bootstrap
     from sqlalchemy import create_engine
+    from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
     from src.adapters.database import orm
-    from sqlalchemy.orm import sessionmaker
     from src.service_layer import unit_of_work
     from src.adapters.message_broker import connection_manager, publisher, subscriber
 
@@ -30,21 +30,39 @@ async def lifespan(_app: FastAPI):
 
     orm.init_orm_mappers()
 
-    primary_engine = create_engine(config.get_primary_url(), echo=True)
-    standby_engine = create_engine(config.get_standby_url(), echo=True)
-    primary_session_factory = sessionmaker(bind=primary_engine)
-    standby_session_factory = sessionmaker(bind=standby_engine)
 
-    orm.metadata.create_all(bind=primary_engine)
+    orm.metadata.create_all(
+        bind=create_engine(
+            config.get_primary_url(
+                is_async=False
+            ),
+            echo=True
+        )
+    )
+
+    primary_engine = create_async_engine(
+        config.get_primary_url(is_async=True),
+        echo=False
+    )
+
+    standby_engine = create_async_engine(
+        config.get_standby_url(),
+        echo=False
+    )
+
+    primary_session_factory = async_sessionmaker(bind=primary_engine)
+    standby_session_factory = async_sessionmaker(bind=standby_engine)
 
     puow = unit_of_work.SqlAlchemyUnitOfWork(primary_session_factory)
     suow = unit_of_work.SqlAlchemyUnitOfWork(standby_session_factory)
     conn = connection_manager.RabbitMQConnectionManager(connection_url=config.get_rabbitmq_url())
     pub = publisher.EventPublisher(connection_manager=conn)
-    mbus = bootstrap.bootstrap(puow=puow, suow=suow, conn=conn, pub=pub)
+
+    mbus = bootstrap.bootstrap(puow=puow, pub=pub)
     sub = subscriber.EventSubscriber(connection_manager=conn, messagebus=mbus)
     _app.state.messagebus = mbus
-    _app.state.connection_manager = conn
+    _app.state.conn = conn
+    _app.state.suow = suow
     consume_task = asyncio.create_task(sub.start_consuming())
 
 
@@ -73,13 +91,14 @@ def create_app():
     Returns:
         FastAPI: The configured FastAPI application.
     """
-    from src.entrypoints import user_app, broker_app
+    from src.entrypoints import broker_app, transaction_app
     from src.core.exceptions.exception_handlers import EXCEPTION_HANDLERS
     from src.core.correlation.middleware import CorrelationIdMiddleware
+    from src.core.security.middleware import JWTAuthMiddleware
 
     _app = FastAPI(
-        title="Chandland API",
-        description="Fastest way to interact with a blockchain.",
+        title="Transaction Service API",
+        description="Blockchain transaction service for TraderJoe swaps on Avalanche",
         version="1.0.0",
         docs_url="/documentation",
         redoc_url="/api-reference",
@@ -87,13 +106,14 @@ def create_app():
     )
 
     _app.add_middleware(CorrelationIdMiddleware)
+    _app.add_middleware(JWTAuthMiddleware)
 
     # Register exception handlers
     for exception_class, handler in EXCEPTION_HANDLERS.items():
         _app.add_exception_handler(exception_class, handler)
 
-    _app.include_router(user_app.router)
     _app.include_router(broker_app.router)
+    _app.include_router(transaction_app.router)
 
     return _app
 
@@ -105,7 +125,7 @@ async def root():
     Returns basic information about the API, its status, and links to documentation.
     """
     return {
-        "message": "Welcome to Chadland API!",
+        "message": "Welcome to Transaction Service API!",
         "version": app.version,
         "status": "active",
         "current_time": datetime.now(tz=timezone.utc).isoformat(),

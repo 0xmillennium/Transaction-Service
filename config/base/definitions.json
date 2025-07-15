@@ -13,21 +13,22 @@
     "read": ".*"
   }],
   "queues": [{
-    "name": "my_queue",
+    "name": "general_queue",
     "vhost": "/",
     "durable": true
   }],
   "exchanges": [{
-    "name": "my_exchange",
+    "name": "transaction.events",
     "vhost": "/",
-    "type": "direct",
-    "durable": true
+    "type": "topic",
+    "durable": true,
+    "auto_delete": false
   }],
   "bindings": [{
-    "source": "my_exchange",
-    "destination": "my_queue",
+    "source": "transaction.events",
+    "destination": "general_queue",
     "destination_type": "queue",
-    "routing_key": "my_key",
+    "routing_key": "transaction.#",
     "vhost": "/"
   }]
 }

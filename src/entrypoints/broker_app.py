@@ -18,7 +18,7 @@ def get_connection_manager(request: Request) -> AbstractConnectionManager:
     Returns:
         AbstractConnectionManager: The active connection manager instance.
     """
-    return request.app.state.connection_manager
+    return request.app.state.conn
 
 
 @router.get("/health", response_model=HealthMetrics)

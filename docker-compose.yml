@@ -67,9 +67,9 @@ services:
       start_period: 10s
     depends_on:
       - primary
-  user:
+  transaction:
     image: python:latest
-    container_name: user_service
+    container_name: transaction_service
     env_file:
       - config/secrets/environments/.env.dev
     volumes:

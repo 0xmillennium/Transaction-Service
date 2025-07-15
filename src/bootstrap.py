@@ -7,14 +7,14 @@ def bootstrap(
         puow: unit_of_work.AbstractUnitOfWork = None,
         suow: unit_of_work.AbstractUnitOfWork = None,
         conn: connection_manager.AbstractConnectionManager = None,
-        pub: publisher.AbstractEventPublisher = None
+        pub: publisher.AbstractEventPublisher = None,
 ) -> messagebus.MessageBus:
     """
         initializes and configures the message bus with dependency-injected handlers.
 
         this function sets up the core components of the application's service layer,
-        including the Unit of Work, connection manager, and event publisher. It
-        then injects these dependencies into the appropriate event and command handlers.
+        including the Unit of Work, connection manager, event publisher, and blockchain adapter.
+        It then injects these dependencies into the appropriate event and command handlers.
 
         Args:
             puow (unit_of_work.AbstractUnitOfWork, optional): The Unit of Work instance
@@ -25,12 +25,19 @@ def bootstrap(
                 manager for message broker interactions. Defaults to None.
             pub (publisher.AbstractEventPublisher, optional): The event publisher
                 for sending domain events. Defaults to None.
+            w3 (AbstractBlockchainAdapter, optional): The blockchain
+                adapter for Web3 interactions. Defaults to None.
 
         Returns:
             messagebus.MessageBus: An initialized MessageBus instance ready to handle
                 commands and events.
         """
-    dependencies = {"puow": puow, "suow": suow, "conn":conn, "pub": pub}
+    dependencies = {
+        "puow": puow, # Primary Unit of Work for writing database operations
+        "suow": suow, # Standby Unit of Work for reading database operations
+        "conn": conn,
+        "pub": pub,
+    }
     injected_event_handlers = {
         event_type: [
             inject_dependencies(handler, dependencies)

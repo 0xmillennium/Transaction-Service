@@ -1,7 +1,7 @@
 [project]
-name = "user_service"
+name = "transaction_service"
 version = "0.1.0"
-description = "Modüler FastAPI mikroservisi"
+description = "Blockchain transaction microservice for TraderJoe swaps on Avalanche"
 authors = [
     { name = "Mübarek", email = "0xmillennium@protonmail.com" }
 ]
@@ -10,16 +10,23 @@ requires-python = ">=3.10"
 
 # `pip install .` komutu çalıştığında kurulacak ana bağımlılıklar
 dependencies = [
-    "pydantic[email] ~=2.8.2",
-    "fastapi ~=0.112.2",
-    "sqlalchemy ~=2.0.34",
+    "pydantic[email] ~=2.10.0",
+    "fastapi ~=0.115.0",
+    "sqlalchemy ~=2.0.36",
     "aio-pika ~=9.5.5",
-    "starlette ~=0.38.2",
+    "starlette ~=0.41.0",
     "aiormq ~=6.8.1",
-    "PyYAML ~=6.0.1",
+    "PyYAML ~=6.0.2",
     "uvicorn ~=0.34.2",
-    "argon2-cffi ~=21.3.0",
-    "psycopg2 ~=2.9.10"
+    "argon2-cffi ~=23.1.0",
+    "psycopg2 ~=2.9.10",
+    "asyncpg ~=0.30.0",
+    "web3 ~=7.6.0",
+    "eth-account ~=0.13.1",
+    "cryptography ~=44.0.0",
+    "websockets ~=13.1",
+    "python-jose[cryptography] ~=3.3.0",
+    "httpx[http2] ~=0.28.0"
 ]
 
 [project.optional-dependencies]

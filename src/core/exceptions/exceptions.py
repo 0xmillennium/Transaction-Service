@@ -69,3 +69,61 @@ class ConnectionClosedException(Error):
     loc: List[str] = Field(default=[])
     msg: str = Field(default="Connection closed.")
     type: ErrorCategory.MessagingError = ErrorCategory.MessagingError.CONNECTION_CLOSED_ERROR
+
+@dataclass(frozen=True)
+class ValidationError(Error):
+    code: int = HTTPStatus.BAD_REQUEST
+    loc: List[str] = Field(default=["body"])
+    msg: str = Field(default="Validation failed.")
+    type: ErrorCategory.ApplicationError = Field(default=ErrorCategory.ApplicationError.VALIDATION_ERROR)
+
+    def __str__(self) -> str:
+        """Return the error message for string representation."""
+        return self.msg
+
+
+@dataclass(frozen=True)
+class BlockchainError(Error):
+    code: int = HTTPStatus.SERVICE_UNAVAILABLE
+    loc: List[str] = Field(default=["blockchain"])
+    msg: str = Field(default="Blockchain operation failed.")
+    type: ErrorCategory.ExternalServiceError = Field(default=ErrorCategory.ExternalServiceError.THIRD_PARTY_ERROR)
+
+
+@dataclass(frozen=True)
+class InsufficientBalanceError(Error):
+    code: int = HTTPStatus.BAD_REQUEST
+    loc: List[str] = Field(default=["body", "amount"])
+    msg: str = Field(default="Insufficient balance for transaction.")
+    type: ErrorCategory.DomainError = Field(default=ErrorCategory.DomainError.BUSINESS_RULE_VIOLATION)
+
+
+@dataclass(frozen=True)
+class WalletNotFoundError(Error):
+    code: int = HTTPStatus.NOT_FOUND
+    loc: List[str] = Field(default=["path", "wallet_id"])
+    msg: str = Field(default="Wallet not found.")
+    type: ErrorCategory.DomainError = Field(default=ErrorCategory.DomainError.AGGREGATE_STATE_INVALID)
+
+
+@dataclass(frozen=True)
+class TransactionNotFoundError(Error):
+    code: int = HTTPStatus.NOT_FOUND
+    loc: List[str] = Field(default=["path", "transaction_id"])
+    msg: str = Field(default="Transaction not found.")
+    type: ErrorCategory.DomainError = Field(default=ErrorCategory.DomainError.AGGREGATE_STATE_INVALID)
+
+
+@dataclass(frozen=True)
+class BlockchainTransactionError(Error):
+    code: int = HTTPStatus.BAD_REQUEST
+    loc: List[str] = Field(default=["blockchain", "transaction"])
+    msg: str = Field(default="Blockchain transaction failed.")
+    type: ErrorCategory.ExternalServiceError = Field(default=ErrorCategory.ExternalServiceError.THIRD_PARTY_ERROR)
+
+    @classmethod
+    def from_error(cls, tx_hash: str, error_message: str) -> "BlockchainTransactionError":
+        return cls(
+            msg=f"Transaction {tx_hash} failed: {error_message}",
+            loc=["blockchain", "transaction", tx_hash]
+        )
